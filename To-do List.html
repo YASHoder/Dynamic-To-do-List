@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dynamic To-Do List</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #4f46e5;
+      --danger: #ef4444;
+      --ok: #10b981;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .container {
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.07);
+      padding: 20px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 1.5rem;
+    }
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    #taskInput {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 1rem;
+    }
+    #addBtn {
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #addBtn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+    .list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid #eee;
+    }
+    .item:last-child { border-bottom: none; }
+    .text {
+      font-size: 1rem;
+    }
+    .item-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .btn, .icon-btn {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      background: #e5e7eb;
+      color: #111827;
+      font-weight: 600;
+    }
+    .btn.primary { background: var(--accent); color: white; }
+    .btn.danger { background: var(--danger); color: white; }
+    .btn.secondary { background: #e2e8f0; }
+    .edit-input {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 1rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+    }
+    .hidden {
+      display: none;
+    }
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Dynamic To-Do List</h1>
+      <div class="input-row" aria-label="Add new task">
+        <input id="taskInput" type="text" placeholder="Enter a new task..." />
+        <button id="addBtn" disabled>Add</button>
+      </div>
+      <ul id="taskList" class="list" aria-label="Task list"></ul>
+      <div id="emptyState" class="empty hidden">No tasks yet. Add one above.</div>
+    </div>
+  </div>
+
+  <script>
+    let tasks = [];
+
+    const taskInput = document.getElementById('taskInput');
+    const addBtn = document.getElementById('addBtn');
+    const taskList = document.getElementById('taskList');
+    const emptyState = document.getElementById('emptyState');
+
+    function render() {
+      taskList.innerHTML = '';
+      if (tasks.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      } else {
+        emptyState.classList.add('hidden');
+      }
+
+      tasks.forEach((t, index) => {
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.setAttribute('data-index', index);
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'text';
+        textSpan.textContent = t.editing ? '' : t.label;
+
+        const editInput = document.createElement('input');
+        editInput.className = 'edit-input';
+        editInput.type = 'text';
+        editInput.value = t.label;
+        editInput.style.display = t.editing ? 'block' : 'none';
+
+        editInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            commitEdit(index, editInput.value);
+          } else if (e.key === 'Escape') {
+            cancelEdit(index);
+          }
+        });
+        editInput.addEventListener('blur', () => {
+          if (t.editing) {
+            commitEdit(index, editInput.value);
+          }
+        });
+
+        const textContainer = document.createElement('div');
+        textContainer.style.display = 'flex';
+        textContainer.style.alignItems = 'center';
+        textContainer.style.gap = '8px';
+        textContainer.appendChild(textSpan);
+        textContainer.appendChild(editInput);
+
+        const actions = document.createElement('div');
+        actions.className = 'item-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn secondary';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', () => startEdit(index));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn danger';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => deleteTask(index));
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn primary';
+        saveBtn.textContent = 'Save';
+        saveBtn.style.display = t.editing ? 'inline-block' : 'none';
+        saveBtn.addEventListener('click', () => commitEdit(index, editInput.value));
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.display = t.editing ? 'inline-block' : 'none';
+        cancelBtn.addEventListener('click', () => cancelEdit(index));
+
+        actions.appendChild(editBtn);
+        actions.appendChild(deleteBtn);
+        actions.appendChild(saveBtn);
+        actions.appendChild(cancelBtn);
+
+        li.appendChild(textContainer);
+        li.appendChild(actions);
+
+        if (t.editing) {
+          textSpan.style.display = 'none';
+          editInput.style.display = 'block';
+        } else {
+          textSpan.style.display = 'block';
+          editInput.style.display = 'none';
+        }
+
+        taskList.appendChild(li);
+      });
+    }
+
+    function addTask() {
+      const value = taskInput.value.trim();
+      if (!value) return;
+      tasks.push({ label: value, editing: false });
+      taskInput.value = '';
+      toggleAddButton();
+      render();
+    }
+
+    function deleteTask(index) {
+      tasks.splice(index, 1);
+      render();
+    }
+
+    function startEdit(index) {
+      tasks = tasks.map((t, i) => (i === index ? { ...t, editing: true } : { ...t, editing: false }));
+      render();
+      setTimeout(() => {
+        const li = taskList.querySelector(`li[data-index="${index}"]`);
+        if (li) {
+          const input = li.querySelector('input.edit-input');
+          if (input) input.focus();
+        }
+      }, 0);
+    }
+
+    function commitEdit(index, newValue) {
+      const val = newValue.trim();
+      if (val) {
+        tasks[index] = { label: val, editing: false };
+      } else {
+        deleteTask(index);
+        render();
+        return;
+      }
+      render();
+    }
+
+    function cancelEdit(index) {
+      tasks[index].editing = false;
+      render();
+    }
+
+    function toggleAddButton() {
+      addBtn.disabled = taskInput.value.trim().length === 0;
+    }
+    taskInput.addEventListener('input', toggleAddButton);
+    addBtn.addEventListener('click', addTask);
+
+    taskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !addBtn.disabled) {
+        addTask();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
